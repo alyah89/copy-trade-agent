@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Copy trade agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --bg: #FAFAF8;
+    --bg-card: #FFFFFF;
+    --bg-sidebar: #F2F1ED;
+    --text: #1A1A18;
+    --text-secondary: #6B6A64;
+    --text-tertiary: #9B9A93;
+    --accent: #3D5A6C;
+    --accent-light: #E8EDEF;
+    --border: #E2E0D8;
+    --green: #2E6B4F;
+    --green-bg: #EAF2EC;
+    --red: #A13D32;
+    --red-bg: #F6EAE8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .num { font-family: 'IBM Plex Mono', monospace; }
+  .app { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 220px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    padding: 24px 16px;
+    flex-shrink: 0;
+  }
+  .brand {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 2px 4px;
+  }
+  .brand-sub {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin: 0 0 28px 4px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 2px;
+    transition: background 0.12s;
+  }
+  .nav-item:hover { background: rgba(0,0,0,0.04); }
+  .nav-item.active { background: var(--bg-card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-tertiary); flex-shrink: 0; }
+  .nav-item.active .nav-dot { background: var(--accent); }
+  .sync-status {
+    margin-top: 28px;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  .sync-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; }
+  .main {
+    flex: 1;
+    padding: 32px 40px;
+    max-width: 1080px;
+  }
+  h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
+  .page-sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 28px; }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .stat-label { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.03em; margin: 0 0 6px; }
+  .stat-value { font-size: 20px; font-weight: 500; margin: 0; font-family: 'IBM Plex Mono', monospace; }
+  .panel-note {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin: 0 0 14px;
+  }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-tertiary);
+    font-weight: 500;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  thead th.r { text-align: right; }
+  tbody td { padding: 9px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  tbody td.r { text-align: right; }
+  tbody tr.mine { background: var(--accent-light); }
+  .win { color: var(--green); }
+  .loss { color: var(--red); }
+  .muted { color: var(--text-tertiary); }
+  .points-tag {
+    color: var(--red);
+    cursor: help;
+    border-bottom: 1px dotted var(--red);
+  }
+  .table-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .table-scroll { overflow-x: auto; max-height: 560px; overflow-y: auto; }
+
+  .form-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 560px;
+  }
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+  .field-grid.full { grid-template-columns: 1fr; }
+  label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 5px; font-weight: 500; }
+  input, select {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--bg-card);
+    color: var(--text);
+  }
+  select { font-family: 'Inter', sans-serif; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+  }
+  button:hover { opacity: 0.92; }
+  button.secondary { background: var(--bg-sidebar); color: var(--text); }
+  .preview-box {
+    background: var(--bg-sidebar);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    display: none;
+  }
+  .saved-msg { font-size: 12px; color: var(--green); margin-left: 10px; display: none; }
+  .help-text { font-size: 12px; color: var(--text-secondary); margin: 0 0 18px; line-height: 1.6; }
+
+  .result-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    background: var(--bg-sidebar);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin: 18px 0;
+  }
+  .result-label { font-size: 12px; color: var(--text-secondary); margin: 0 0 4px; }
+  .result-value { font-size: 22px; font-weight: 500; margin: 0; font-family: 'IBM Plex Mono', monospace; }
+  .trend-check { border-top: 1px solid var(--border); padding-top: 18px; margin-top: 6px; }
+  .trend-check h3 { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+  .trend-btns { display: flex; gap: 8px; margin-top: 10px; }
+  .trend-result {
+    margin-top: 12px;
+    font-size: 13px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    display: none;
+  }
+  @media (max-width: 720px) {
+    .sidebar { display: none; }
+    .main { padding: 20px; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .field-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="sidebar">
+    <p class="brand">Copy trade agent</p>
+    <p class="brand-sub">XAUUSD desk</p>
+    <div class="nav-item active" data-page="log"><span class="nav-dot"></span>Saruja log</div>
+    <div class="nav-item" data-page="new"><span class="nav-dot"></span>New trade</div>
+    <div class="nav-item" data-page="size"><span class="nav-dot"></span>Lot size check</div>
+    <div class="sync-status" id="sync-status"><span class="sync-dot" style="background:var(--text-tertiary)"></span>Connecting...</div>
+  </div>
+
+  <div class="main">
+
+    <div id="page-log">
+      <h1>Saruja trade log</h1>
+      <p class="page-sub">Real entries from the copied account, with against-trade distance computed from actual price history.</p>
+      <div class="stat-grid">
+        <div class="stat-card"><p class="stat-label">Trades</p><p class="stat-value" id="stat-count">-</p></div>
+        <div class="stat-card"><p class="stat-label">Win rate</p><p class="stat-value" id="stat-winrate">-</p></div>
+        <div class="stat-card"><p class="stat-label">Total p/l</p><p class="stat-value" id="stat-total">-</p></div>
+        <div class="stat-card"><p class="stat-label">Largest adverse move</p><p class="stat-value" id="stat-maxmae">-</p></div>
+      </div>
+      <p class="panel-note">Against trade shows price points moved against the entry at worst, computed from real M15 history. Hover a value to see the price reached.</p>
+      <div class="table-wrap">
+        <div class="table-scroll">
+          <table>
+            <colgroup>
+              <col style="width:13%"><col style="width:13%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:14%"><col style="width:17%"><col style="width:17%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Open time</th><th>Close time</th><th>Dir</th>
+                <th class="r">Entry</th><th class="r">Close</th><th class="r">P/L</th><th class="r">Against trade</th><th class="r">Against trade ($)</th>
+              </tr>
+            </thead>
+            <tbody id="log-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="page-new" style="display:none">
+      <h1>Log a new trade</h1>
+      <p class="page-sub">Record a trade you are copying or taking yourself. Saved trades sync across your devices.</p>
+      <div class="form-card">
+        <div class="field-grid">
+          <div>
+            <label>Direction</label>
+            <select id="nt-direction"><option value="long">Long (buy)</option><option value="short">Short (sell)</option></select>
+          </div>
+          <div>
+            <label>Lot size</label>
+            <input type="number" id="nt-lots" step="0.01" placeholder="0.10">
+          </div>
+          <div>
+            <label>Entry price</label>
+            <input type="number" id="nt-entry" step="0.01" placeholder="4200.00">
+          </div>
+          <div>
+            <label>Close price (blank if open)</label>
+            <input type="number" id="nt-close" step="0.01" placeholder="4215.00">
+          </div>
+          <div>
+            <label>Open time</label>
+            <input type="datetime-local" id="nt-opentime">
+          </div>
+          <div>
+            <label>Close time (blank if open)</label>
+            <input type="datetime-local" id="nt-closetime">
+          </div>
+        </div>
+        <div class="field-grid full">
+          <div>
+            <label>Worst price reached against you</label>
+            <input type="number" id="nt-worstprice" step="0.01" placeholder="4185.00">
+          </div>
+        </div>
+        <div class="preview-box" id="nt-preview"></div>
+        <button id="nt-save">Save trade</button>
+        <span class="saved-msg" id="nt-saved-msg">Saved</span>
+      </div>
+    </div>
+
+    <div id="page-size" style="display:none">
+      <h1>Lot size check</h1>
+      <p class="page-sub">Size a position against your capital and a real stop, then record whether the H4 trend agrees before you commit.</p>
+      <div class="form-card">
+        <div class="field-grid">
+          <div>
+            <label>Trading capital ($)</label>
+            <input type="number" id="ls-capital" step="100" placeholder="5000">
+          </div>
+          <div>
+            <label>Risk per trade (% of capital)</label>
+            <input type="number" id="ls-riskpct" step="0.1" value="0.5">
+          </div>
+          <div>
+            <label>Entry price</label>
+            <input type="number" id="ls-entry" step="0.01" placeholder="4200.00">
+          </div>
+          <div>
+            <label>Direction</label>
+            <select id="ls-direction"><option value="long">Long (buy)</option><option value="short">Short (sell)</option></select>
+          </div>
+        </div>
+        <div class="field-grid full">
+          <div>
+            <label>Planned stop-loss price</label>
+            <input type="number" id="ls-stop" step="0.01" placeholder="4185.00">
+          </div>
+        </div>
+        <div class="result-grid">
+          <div><p class="result-label">Dollar risk at this stop</p><p class="result-value" id="ls-out-risk">-</p></div>
+          <div><p class="result-label">Safest lot size</p><p class="result-value" id="ls-out-lots">-</p></div>
+        </div>
+        <div class="trend-check">
+          <h3>Does the H4 trend agree with this trade</h3>
+          <p class="help-text">Check your H4 chart: are EMAs 8/13/21/34/55/89 cleanly stacked in this trade's direction, and has that held for at least 3 H4 bars (12 hours)? This matches what the validated backtest required before counting a signal.</p>
+          <div class="trend-btns">
+            <button id="ls-agree-yes" style="flex:1">Yes, trend agrees</button>
+            <button id="ls-agree-no" class="secondary" style="flex:1">No or not sure</button>
+          </div>
+          <div class="trend-result" id="ls-agree-result"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ---- Supabase setup ----
+// Replace these two values with your own project's URL and anon public key,
+// found in Supabase dashboard -> Project Settings -> API.
+const SUPABASE_URL = 'https://yoapgkponfstdkcyywem.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_Lo9hSp9bKvfbrtNCJDmDYw_XC6OW0g9';
+
+let supabaseClient = null;
+let supabaseReady = false;
+try {
+  if (SUPABASE_URL !== 'YOUR_SUPABASE_URL' && window.supabase) {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabaseReady = true;
+  }
+} catch (e) {
+  console.error('Supabase init failed', e);
+}
+
+function setSyncStatus(state) {
+  const el = document.getElementById('sync-status');
+  const dotColor = state === 'ok' ? '#2E6B4F' : state === 'error' ? '#A13D32' : '#9B9A93';
+  const text = state === 'ok' ? 'Synced' : state === 'error' ? 'Sync error - check setup' : state === 'local' ? 'Not connected - set up Supabase' : 'Connecting...';
+  el.innerHTML = '<span class="sync-dot" style="background:' + dotColor + '"></span>' + text;
+}
+
+const SARUJA_TRADES = [{"ticket": 118360666, "open_time_utc": "2026-03-02 13:19:00", "close_time_utc": "2026-03-02 15:02:00", "direction": "short", "open_price": 5364.5, "close_price": 5263.47, "volume_lots": 0.25, "logged_profit_usd": 2525.75}, {"ticket": 118382072, "open_time_utc": "2026-03-02 18:58:00", "close_time_utc": "2026-03-02 20:54:00", "direction": "short", "open_price": 5331.72, "close_price": 5325.24, "volume_lots": 0.48, "logged_profit_usd": 311.04}, {"ticket": 118424462, "open_time_utc": "2026-03-03 11:06:00", "close_time_utc": "2026-03-03 12:40:00", "direction": "short", "open_price": 5166.3, "close_price": 5152.53, "volume_lots": 0.5, "logged_profit_usd": 688.5}, {"ticket": 118450131, "open_time_utc": "2026-03-03 17:56:00", "close_time_utc": "2026-03-03 18:16:00", "direction": "short", "open_price": 5133.4, "close_price": 5112.47, "volume_lots": 0.5, "logged_profit_usd": 1046.5}, {"ticket": 118463820, "open_time_utc": "2026-03-04 03:38:00", "close_time_utc": "2026-03-04 17:13:00", "direction": "short", "open_price": 5165.0, "close_price": 5119.64, "volume_lots": 0.65, "logged_profit_usd": 2948.4}, {"ticket": 118514451, "open_time_utc": "2026-03-05 03:16:00", "close_time_utc": "2026-03-05 05:16:00", "direction": "short", "open_price": 5181.99, "close_price": 5130.18, "volume_lots": 0.95, "logged_profit_usd": 4921.95}, {"ticket": 118536224, "open_time_utc": "2026-03-05 12:00:00", "close_time_utc": "2026-03-05 12:21:00", "direction": "short", "open_price": 5160.7, "close_price": 5119.58, "volume_lots": 1.3, "logged_profit_usd": 5345.6}, {"ticket": 118595206, "open_time_utc": "2026-03-06 12:42:00", "close_time_utc": "2026-03-06 12:57:00", "direction": "short", "open_price": 5122.43, "close_price": 5081.44, "volume_lots": 1.0, "logged_profit_usd": 4099.0}, {"ticket": 118637360, "open_time_utc": "2026-03-09 03:17:00", "close_time_utc": "2026-03-13 13:57:00", "direction": "short", "open_price": 5090.75, "close_price": 5043.95, "volume_lots": 1.0, "logged_profit_usd": 4680.0}, {"ticket": 118912559, "open_time_utc": "2026-03-16 12:02:00", "close_time_utc": "2026-03-16 15:35:00", "direction": "short", "open_price": 5015.49, "close_price": 4974.49, "volume_lots": 1.0, "logged_profit_usd": 4100.0}, {"ticket": 118943975, "open_time_utc": "2026-03-17 07:31:00", "close_time_utc": "2026-03-17 14:38:00", "direction": "short", "open_price": 5020.32, "close_price": 4985.8, "volume_lots": 1.3, "logged_profit_usd": 4487.6}, {"ticket": 118982368, "open_time_utc": "2026-03-18 10:07:00", "close_time_utc": "2026-03-18 10:39:00", "direction": "short", "open_price": 4952.78, "close_price": 4948.87, "volume_lots": 1.3, "logged_profit_usd": 508.3}, {"ticket": 118993557, "open_time_utc": "2026-03-18 13:04:00", "close_time_utc": "2026-03-18 13:18:00", "direction": "short", "open_price": 4883.37, "close_price": 4875.03, "volume_lots": 1.0, "logged_profit_usd": 834.0}, {"ticket": 119048759, "open_time_utc": "2026-03-19 14:00:00", "close_time_utc": "2026-03-19 14:32:00", "direction": "short", "open_price": 4600.28, "close_price": 4585.05, "volume_lots": 1.0, "logged_profit_usd": 1523.0}, {"ticket": 119055262, "open_time_utc": "2026-03-19 16:26:00", "close_time_utc": "2026-03-19 16:28:00", "direction": "short", "open_price": 4608.19, "close_price": 4603.17, "volume_lots": 1.3, "logged_profit_usd": 652.6}, {"ticket": 119057282, "open_time_utc": "2026-03-19 17:33:00", "close_time_utc": "2026-03-19 17:33:00", "direction": "short", "open_price": 4609.96, "close_price": 4605.32, "volume_lots": 1.3, "logged_profit_usd": 603.2}, {"ticket": 119059372, "open_time_utc": "2026-03-19 18:07:00", "close_time_utc": "2026-03-19 18:10:00", "direction": "short", "open_price": 4653.19, "close_price": 4642.66, "volume_lots": 1.3, "logged_profit_usd": 1368.9}, {"ticket": 119069886, "open_time_utc": "2026-03-20 04:43:00", "close_time_utc": "2026-03-20 05:38:00", "direction": "short", "open_price": 4706.92, "close_price": 4670.94, "volume_lots": 1.3, "logged_profit_usd": 4677.4}, {"ticket": 119140921, "open_time_utc": "2026-03-23 10:51:00", "close_time_utc": "2026-03-23 10:51:00", "direction": "short", "open_price": 4392.12, "close_price": 4380.76, "volume_lots": 1.0, "logged_profit_usd": 1136.0}, {"ticket": 119141324, "open_time_utc": "2026-03-23 10:54:00", "close_time_utc": "2026-03-23 10:55:00", "direction": "short", "open_price": 4409.98, "close_price": 4399.45, "volume_lots": 1.0, "logged_profit_usd": 1053.0}, {"ticket": 119145730, "open_time_utc": "2026-03-23 11:36:00", "close_time_utc": "2026-03-23 12:26:00", "direction": "short", "open_price": 4408.41, "close_price": 4407.79, "volume_lots": 1.0, "logged_profit_usd": 62.0}, {"ticket": 119152382, "open_time_utc": "2026-03-23 13:00:00", "close_time_utc": "2026-03-23 14:17:00", "direction": "short", "open_price": 4462.84, "close_price": 4443.03, "volume_lots": 1.0, "logged_profit_usd": 1981.0}, {"ticket": 119187058, "open_time_utc": "2026-03-24 06:29:00", "close_time_utc": "2026-03-24 06:32:00", "direction": "short", "open_price": 4413.64, "close_price": 4404.45, "volume_lots": 1.0, "logged_profit_usd": 919.0}, {"ticket": 119188683, "open_time_utc": "2026-03-24 07:15:00", "close_time_utc": "2026-03-24 07:18:00", "direction": "short", "open_price": 4415.1, "close_price": 4404.54, "volume_lots": 1.0, "logged_profit_usd": 1056.0}, {"ticket": 119191951, "open_time_utc": "2026-03-24 08:49:00", "close_time_utc": "2026-03-24 08:52:00", "direction": "short", "open_price": 4416.73, "close_price": 4412.54, "volume_lots": 1.0, "logged_profit_usd": 419.0}, {"ticket": 119194012, "open_time_utc": "2026-03-24 09:54:00", "close_time_utc": "2026-03-24 10:04:00", "direction": "short", "open_price": 4429.25, "close_price": 4400.02, "volume_lots": 1.0, "logged_profit_usd": 2923.0}, {"ticket": 119225718, "open_time_utc": "2026-03-25 04:12:00", "close_time_utc": "2026-03-25 05:08:00", "direction": "short", "open_price": 4568.52, "close_price": 4545.75, "volume_lots": 1.0, "logged_profit_usd": 2277.0}, {"ticket": 119230610, "open_time_utc": "2026-03-25 07:34:00", "close_time_utc": "2026-03-25 11:32:00", "direction": "short", "open_price": 4565.17, "close_price": 4530.51, "volume_lots": 1.0, "logged_profit_usd": 3466.0}, {"ticket": 119271919, "open_time_utc": "2026-03-26 10:02:00", "close_time_utc": "2026-03-26 10:47:00", "direction": "short", "open_price": 4441.09, "close_price": 4433.39, "volume_lots": 1.0, "logged_profit_usd": 770.0}, {"ticket": 119279151, "open_time_utc": "2026-03-26 13:08:00", "close_time_utc": "2026-03-26 13:13:00", "direction": "short", "open_price": 4446.69, "close_price": 4441.12, "volume_lots": 1.0, "logged_profit_usd": 557.0}, {"ticket": 119282079, "open_time_utc": "2026-03-26 14:28:00", "close_time_utc": "2026-03-26 14:31:00", "direction": "short", "open_price": 4457.6, "close_price": 4442.43, "volume_lots": 1.0, "logged_profit_usd": 1517.0}, {"ticket": 119300510, "open_time_utc": "2026-03-27 04:46:00", "close_time_utc": "2026-03-27 07:28:00", "direction": "short", "open_price": 4467.86, "close_price": 4433.53, "volume_lots": 1.0, "logged_profit_usd": 3433.0}, {"ticket": 119333650, "open_time_utc": "2026-03-30 03:54:00", "close_time_utc": "2026-03-30 04:21:00", "direction": "short", "open_price": 4503.48, "close_price": 4490.89, "volume_lots": 1.0, "logged_profit_usd": 1259.0}, {"ticket": 119342005, "open_time_utc": "2026-03-30 09:04:00", "close_time_utc": "2026-03-30 09:18:00", "direction": "short", "open_price": 4539.11, "close_price": 4527.62, "volume_lots": 1.0, "logged_profit_usd": 1149.0}, {"ticket": 119343603, "open_time_utc": "2026-03-30 09:56:00", "close_time_utc": "2026-03-30 13:58:00", "direction": "short", "open_price": 4531.67, "close_price": 4518.23, "volume_lots": 1.0, "logged_profit_usd": 1344.0}, {"ticket": 119354906, "open_time_utc": "2026-03-30 14:55:00", "close_time_utc": "2026-03-30 17:41:00", "direction": "short", "open_price": 4537.01, "close_price": 4516.96, "volume_lots": 1.0, "logged_profit_usd": 2005.0}, {"ticket": 119374027, "open_time_utc": "2026-03-31 06:39:00", "close_time_utc": "2026-03-31 10:40:00", "direction": "short", "open_price": 4560.91, "close_price": 4534.65, "volume_lots": 1.4, "logged_profit_usd": 3676.4}, {"ticket": 119389994, "open_time_utc": "2026-03-31 14:17:00", "close_time_utc": "2026-04-02 06:11:00", "direction": "short", "open_price": 4609.32, "close_price": 4554.84, "volume_lots": 1.4, "logged_profit_usd": 7627.2}, {"ticket": 119431894, "open_time_utc": "2026-04-01 11:16:00", "close_time_utc": "2026-04-02 06:11:00", "direction": "short", "open_price": 4738.43, "close_price": 4554.84, "volume_lots": 1.0, "logged_profit_usd": 18359.0}, {"ticket": 119504701, "open_time_utc": "2026-04-06 07:59:00", "close_time_utc": "2026-04-06 12:19:00", "direction": "short", "open_price": 4682.69, "close_price": 4672.45, "volume_lots": 1.5, "logged_profit_usd": 1536.0}, {"ticket": 119537620, "open_time_utc": "2026-04-07 09:28:00", "close_time_utc": "2026-04-07 09:31:00", "direction": "short", "open_price": 4689.81, "close_price": 4683.83, "volume_lots": 1.5, "logged_profit_usd": 897.0}, {"ticket": 119544991, "open_time_utc": "2026-04-07 12:48:00", "close_time_utc": "2026-04-07 13:35:00", "direction": "short", "open_price": 4648.25, "close_price": 4647.0, "volume_lots": 1.5, "logged_profit_usd": 187.5}, {"ticket": 119576016, "open_time_utc": "2026-04-08 06:55:00", "close_time_utc": "2026-04-08 07:10:00", "direction": "short", "open_price": 4822.09, "close_price": 4813.0, "volume_lots": 1.5, "logged_profit_usd": 1363.5}, {"ticket": 119578476, "open_time_utc": "2026-04-08 08:11:00", "close_time_utc": "2026-04-08 08:25:00", "direction": "short", "open_price": 4815.43, "close_price": 4807.6, "volume_lots": 1.5, "logged_profit_usd": 1174.5}, {"ticket": 119586285, "open_time_utc": "2026-04-08 12:48:00", "close_time_utc": "2026-04-08 13:32:00", "direction": "short", "open_price": 4796.38, "close_price": 4782.73, "volume_lots": 1.5, "logged_profit_usd": 2047.5}, {"ticket": 119589413, "open_time_utc": "2026-04-08 14:24:00", "close_time_utc": "2026-04-08 14:25:00", "direction": "short", "open_price": 4774.72, "close_price": 4769.72, "volume_lots": 2.0, "logged_profit_usd": 1000.0}, {"ticket": 119591591, "open_time_utc": "2026-04-08 15:22:00", "close_time_utc": "2026-04-08 16:20:00", "direction": "short", "open_price": 4755.05, "close_price": 4749.0, "volume_lots": 2.0, "logged_profit_usd": 1210.0}, {"ticket": 119593689, "open_time_utc": "2026-04-08 16:54:00", "close_time_utc": "2026-04-08 17:21:00", "direction": "short", "open_price": 4761.77, "close_price": 4754.49, "volume_lots": 2.0, "logged_profit_usd": 1456.0}, {"ticket": 119608748, "open_time_utc": "2026-04-09 07:38:00", "close_time_utc": "2026-04-10 20:20:00", "direction": "short", "open_price": 4728.83, "close_price": 4751.25, "volume_lots": 2.0, "logged_profit_usd": -4484.0}, {"ticket": 119624796, "open_time_utc": "2026-04-09 17:47:00", "close_time_utc": "2026-04-10 02:26:00", "direction": "short", "open_price": 4799.02, "close_price": 4747.97, "volume_lots": 1.0, "logged_profit_usd": 5105.0}, {"ticket": 119641337, "open_time_utc": "2026-04-10 11:01:00", "close_time_utc": "2026-04-10 20:16:00", "direction": "short", "open_price": 4757.08, "close_price": 4752.73, "volume_lots": 1.0, "logged_profit_usd": 435.0}, {"ticket": 119655394, "open_time_utc": "2026-04-12 22:12:00", "close_time_utc": "2026-04-12 22:23:00", "direction": "short", "open_price": 4676.79, "close_price": 4665.63, "volume_lots": 2.0, "logged_profit_usd": 2232.0}, {"ticket": 119660756, "open_time_utc": "2026-04-13 03:28:00", "close_time_utc": "2026-04-13 11:56:00", "direction": "short", "open_price": 4720.26, "close_price": 4707.37, "volume_lots": 2.0, "logged_profit_usd": 2578.0}, {"ticket": 119671890, "open_time_utc": "2026-04-13 12:46:00", "close_time_utc": "2026-04-13 15:26:00", "direction": "short", "open_price": 4719.24, "close_price": 4704.01, "volume_lots": 2.0, "logged_profit_usd": 3046.0}, {"ticket": 119680040, "open_time_utc": "2026-04-13 17:15:00", "close_time_utc": "2026-04-21 15:02:00", "direction": "short", "open_price": 4730.27, "close_price": 4735.15, "volume_lots": 2.0, "logged_profit_usd": -976.0}, {"ticket": 119700501, "open_time_utc": "2026-04-14 13:31:00", "close_time_utc": "2026-04-21 15:02:00", "direction": "short", "open_price": 4783.52, "close_price": 4733.63, "volume_lots": 1.0, "logged_profit_usd": 4989.0}, {"ticket": 119770198, "open_time_utc": "2026-04-17 13:53:00", "close_time_utc": "2026-04-17 20:37:00", "direction": "short", "open_price": 4870.6, "close_price": 4841.29, "volume_lots": 1.0, "logged_profit_usd": 2931.0}, {"ticket": 119839707, "open_time_utc": "2026-04-21 19:37:00", "close_time_utc": "2026-04-21 19:38:00", "direction": "short", "open_price": 4703.33, "close_price": 4700.05, "volume_lots": 2.0, "logged_profit_usd": 656.0}, {"ticket": 119850434, "open_time_utc": "2026-04-22 08:50:00", "close_time_utc": "2026-04-22 09:55:00", "direction": "short", "open_price": 4755.03, "close_price": 4754.18, "volume_lots": 2.0, "logged_profit_usd": 170.0}, {"ticket": 119854447, "open_time_utc": "2026-04-22 12:05:00", "close_time_utc": "2026-04-22 12:19:00", "direction": "short", "open_price": 4756.02, "close_price": 4749.6, "volume_lots": 2.5, "logged_profit_usd": 1605.0}, {"ticket": 119863979, "open_time_utc": "2026-04-22 17:36:00", "close_time_utc": "2026-04-22 23:43:00", "direction": "short", "open_price": 4737.01, "close_price": 4725.4, "volume_lots": 2.5, "logged_profit_usd": 2902.5}, {"ticket": 119878348, "open_time_utc": "2026-04-23 09:36:00", "close_time_utc": "2026-04-23 09:54:00", "direction": "short", "open_price": 4699.92, "close_price": 4696.52, "volume_lots": 2.6, "logged_profit_usd": 884.0}, {"ticket": 119878876, "open_time_utc": "2026-04-23 10:06:00", "close_time_utc": "2026-04-23 10:11:00", "direction": "short", "open_price": 4700.16, "close_price": 4691.42, "volume_lots": 2.6, "logged_profit_usd": 2272.4}, {"ticket": 119880632, "open_time_utc": "2026-04-23 11:27:00", "close_time_utc": "2026-04-23 17:46:00", "direction": "short", "open_price": 4700.94, "close_price": 4675.91, "volume_lots": 2.6, "logged_profit_usd": 6507.8}, {"ticket": 119906491, "open_time_utc": "2026-04-24 11:05:00", "close_time_utc": "2026-04-24 20:54:00", "direction": "short", "open_price": 4689.92, "close_price": 4708.31, "volume_lots": 2.6, "logged_profit_usd": -4781.4}, {"ticket": 119916088, "open_time_utc": "2026-04-24 17:05:00", "close_time_utc": "2026-04-24 20:54:00", "direction": "short", "open_price": 4728.41, "close_price": 4708.17, "volume_lots": 1.4, "logged_profit_usd": 2833.6}, {"ticket": 119931782, "open_time_utc": "2026-04-27 10:59:00", "close_time_utc": "2026-04-27 13:32:00", "direction": "short", "open_price": 4708.38, "close_price": 4700.22, "volume_lots": 3.0, "logged_profit_usd": 2448.0}, {"ticket": 119945020, "open_time_utc": "2026-04-28 04:11:00", "close_time_utc": "2026-04-28 05:06:00", "direction": "short", "open_price": 4667.69, "close_price": 4661.23, "volume_lots": 3.0, "logged_profit_usd": 1938.0}, {"ticket": 119954583, "open_time_utc": "2026-04-28 11:00:00", "close_time_utc": "2026-04-28 11:13:00", "direction": "short", "open_price": 4602.12, "close_price": 4600.33, "volume_lots": 3.0, "logged_profit_usd": 537.0}, {"ticket": 119972796, "open_time_utc": "2026-04-29 03:35:00", "close_time_utc": "2026-04-29 06:20:00", "direction": "short", "open_price": 4596.66, "close_price": 4586.47, "volume_lots": 3.0, "logged_profit_usd": 3057.0}, {"ticket": 119990330, "open_time_utc": "2026-04-29 15:49:00", "close_time_utc": "2026-04-29 15:54:00", "direction": "short", "open_price": 4553.29, "close_price": 4546.62, "volume_lots": 3.0, "logged_profit_usd": 2001.0}, {"ticket": 119991105, "open_time_utc": "2026-04-29 16:01:00", "close_time_utc": "2026-04-29 16:56:00", "direction": "short", "open_price": 4553.37, "close_price": 4544.88, "volume_lots": 3.0, "logged_profit_usd": 2547.0}, {"ticket": 120004085, "open_time_utc": "2026-04-30 05:40:00", "close_time_utc": "2026-05-01 08:31:00", "direction": "short", "open_price": 4564.6, "close_price": 4568.6, "volume_lots": 3.0, "logged_profit_usd": -1200.0}, {"ticket": 120008047, "open_time_utc": "2026-04-30 08:06:00", "close_time_utc": "2026-05-01 08:31:00", "direction": "short", "open_price": 4623.59, "close_price": 4567.84, "volume_lots": 1.5, "logged_profit_usd": 8362.5}, {"ticket": 120091375, "open_time_utc": "2026-05-05 09:14:00", "close_time_utc": "2026-05-05 11:02:00", "direction": "short", "open_price": 4557.57, "close_price": 4541.82, "volume_lots": 3.0, "logged_profit_usd": 4725.0}, {"ticket": 120098401, "open_time_utc": "2026-05-05 13:47:00", "close_time_utc": "2026-05-05 14:21:00", "direction": "short", "open_price": 4575.99, "close_price": 4570.74, "volume_lots": 3.0, "logged_profit_usd": 1575.0}, {"ticket": 120099723, "open_time_utc": "2026-05-05 14:32:00", "close_time_utc": "2026-05-05 15:46:00", "direction": "short", "open_price": 4582.13, "close_price": 4573.48, "volume_lots": 3.0, "logged_profit_usd": 2595.0}, {"ticket": 120117934, "open_time_utc": "2026-05-06 09:23:00", "close_time_utc": "2026-05-06 12:09:00", "direction": "short", "open_price": 4691.89, "close_price": 4683.19, "volume_lots": 3.0, "logged_profit_usd": 2610.0}, {"ticket": 120126045, "open_time_utc": "2026-05-06 14:32:00", "close_time_utc": "2026-05-06 15:25:00", "direction": "short", "open_price": 4707.82, "close_price": 4698.01, "volume_lots": 3.0, "logged_profit_usd": 2943.0}, {"ticket": 120138779, "open_time_utc": "2026-05-07 08:53:00", "close_time_utc": "2026-05-07 16:15:00", "direction": "short", "open_price": 4736.1, "close_price": 4712.18, "volume_lots": 3.0, "logged_profit_usd": 7176.0}, {"ticket": 120175835, "open_time_utc": "2026-05-10 22:05:00", "close_time_utc": "2026-05-11 04:52:00", "direction": "short", "open_price": 4686.2, "close_price": 4674.98, "volume_lots": 3.6, "logged_profit_usd": 4039.2}, {"ticket": 120186984, "open_time_utc": "2026-05-11 11:54:00", "close_time_utc": "2026-05-12 14:57:00", "direction": "short", "open_price": 4672.78, "close_price": 4672.27, "volume_lots": 3.6, "logged_profit_usd": 183.6}, {"ticket": 120188896, "open_time_utc": "2026-05-11 13:13:00", "close_time_utc": "2026-05-12 14:58:00", "direction": "short", "open_price": 4717.32, "close_price": 4671.31, "volume_lots": 1.4, "logged_profit_usd": 6441.4}, {"ticket": 120223356, "open_time_utc": "2026-05-13 02:31:00", "close_time_utc": "2026-05-13 02:44:00", "direction": "short", "open_price": 4696.25, "close_price": 4695.1, "volume_lots": 4.0, "logged_profit_usd": 460.0}, {"ticket": 120232317, "open_time_utc": "2026-05-13 12:30:00", "close_time_utc": "2026-05-13 13:38:00", "direction": "short", "open_price": 4681.53, "close_price": 4675.0, "volume_lots": 4.0, "logged_profit_usd": 2612.0}, {"ticket": 120238043, "open_time_utc": "2026-05-13 16:22:00", "close_time_utc": "2026-05-13 18:01:00", "direction": "short", "open_price": 4701.81, "close_price": 4688.48, "volume_lots": 4.0, "logged_profit_usd": 5332.0}, {"ticket": 120252285, "open_time_utc": "2026-05-14 11:16:00", "close_time_utc": "2026-05-14 11:27:00", "direction": "short", "open_price": 4696.23, "close_price": 4692.01, "volume_lots": 4.0, "logged_profit_usd": 1688.0}, {"ticket": 120253942, "open_time_utc": "2026-05-14 12:35:00", "close_time_utc": "2026-05-14 13:06:00", "direction": "short", "open_price": 4706.22, "close_price": 4701.42, "volume_lots": 4.0, "logged_profit_usd": 1920.0}, {"ticket": 120280825, "open_time_utc": "2026-05-15 12:01:00", "close_time_utc": "2026-05-15 12:44:00", "direction": "short", "open_price": 4547.43, "close_price": 4547.18, "volume_lots": 4.0, "logged_profit_usd": 100.0}, {"ticket": 120286400, "open_time_utc": "2026-05-15 15:13:00", "close_time_utc": "2026-05-15 15:19:00", "direction": "short", "open_price": 4553.95, "close_price": 4546.79, "volume_lots": 4.0, "logged_profit_usd": 2864.0}, {"ticket": 120301829, "open_time_utc": "2026-05-18 08:16:00", "close_time_utc": "2026-05-18 14:47:00", "direction": "short", "open_price": 4544.02, "close_price": 4541.06, "volume_lots": 4.0, "logged_profit_usd": 1184.0}, {"ticket": 120306624, "open_time_utc": "2026-05-18 12:47:00", "close_time_utc": "2026-05-18 14:47:00", "direction": "short", "open_price": 4570.17, "close_price": 4541.55, "volume_lots": 2.0, "logged_profit_usd": 5724.0}, {"ticket": 120313080, "open_time_utc": "2026-05-18 16:38:00", "close_time_utc": "2026-05-18 18:59:00", "direction": "short", "open_price": 4544.54, "close_price": 4536.14, "volume_lots": 4.0, "logged_profit_usd": 3360.0}, {"ticket": 120328974, "open_time_utc": "2026-05-19 12:03:00", "close_time_utc": "2026-05-19 13:05:00", "direction": "short", "open_price": 4534.93, "close_price": 4525.07, "volume_lots": 4.0, "logged_profit_usd": 3944.0}, {"ticket": 120335442, "open_time_utc": "2026-05-19 15:40:00", "close_time_utc": "2026-05-19 16:09:00", "direction": "short", "open_price": 4502.77, "close_price": 4498.5, "volume_lots": 4.0, "logged_profit_usd": 1708.0}, {"ticket": 120349845, "open_time_utc": "2026-05-20 12:29:00", "close_time_utc": "2026-05-20 13:56:00", "direction": "short", "open_price": 4497.63, "close_price": 4484.42, "volume_lots": 4.0, "logged_profit_usd": 5284.0}, {"ticket": 120357426, "open_time_utc": "2026-05-20 16:36:00", "close_time_utc": "2026-05-21 06:51:00", "direction": "short", "open_price": 4526.47, "close_price": 4521.73, "volume_lots": 4.0, "logged_profit_usd": 1896.0}, {"ticket": 120369450, "open_time_utc": "2026-05-21 09:38:00", "close_time_utc": "2026-05-21 10:28:00", "direction": "short", "open_price": 4535.11, "close_price": 4520.09, "volume_lots": 4.0, "logged_profit_usd": 6008.0}, {"ticket": 120418463, "open_time_utc": "2026-05-26 01:46:00", "close_time_utc": "2026-05-26 05:53:00", "direction": "short", "open_price": 4532.6, "close_price": 4526.25, "volume_lots": 4.0, "logged_profit_usd": 2540.0}, {"ticket": 120425216, "open_time_utc": "2026-05-26 10:29:00", "close_time_utc": "2026-05-26 11:30:00", "direction": "short", "open_price": 4533.16, "close_price": 4523.0, "volume_lots": 4.0, "logged_profit_usd": 4064.0}, {"ticket": 120428891, "open_time_utc": "2026-05-26 13:40:00", "close_time_utc": "2026-05-26 13:54:00", "direction": "short", "open_price": 4526.31, "close_price": 4516.79, "volume_lots": 4.0, "logged_profit_usd": 3808.0}, {"ticket": 120440874, "open_time_utc": "2026-05-27 08:59:00", "close_time_utc": "2026-05-27 10:13:00", "direction": "short", "open_price": 4496.59, "close_price": 4486.3, "volume_lots": 4.0, "logged_profit_usd": 4116.0}, {"ticket": 120450351, "open_time_utc": "2026-05-27 16:58:00", "close_time_utc": "2026-05-28 02:14:00", "direction": "short", "open_price": 4450.01, "close_price": 4403.4, "volume_lots": 4.0, "logged_profit_usd": 18644.0}, {"ticket": 120470278, "open_time_utc": "2026-05-28 17:54:00", "close_time_utc": "2026-05-28 18:35:00", "direction": "short", "open_price": 4507.67, "close_price": 4501.55, "volume_lots": 4.0, "logged_profit_usd": 2448.0}, {"ticket": 120497523, "open_time_utc": "2026-06-01 07:08:00", "close_time_utc": "2026-06-01 07:53:00", "direction": "short", "open_price": 4508.33, "close_price": 4494.61, "volume_lots": 5.0, "logged_profit_usd": 6860.0}, {"ticket": 120500745, "open_time_utc": "2026-06-01 10:28:00", "close_time_utc": "2026-06-01 13:14:00", "direction": "short", "open_price": 4501.8, "close_price": 4482.09, "volume_lots": 5.0, "logged_profit_usd": 9855.0}, {"ticket": 120524250, "open_time_utc": "2026-06-02 13:16:00", "close_time_utc": "2026-06-02 13:55:00", "direction": "short", "open_price": 4514.43, "close_price": 4505.51, "volume_lots": 5.0, "logged_profit_usd": 4460.0}, {"ticket": 120528406, "open_time_utc": "2026-06-02 16:11:00", "close_time_utc": "2026-06-02 16:18:00", "direction": "short", "open_price": 4501.5, "close_price": 4495.07, "volume_lots": 5.0, "logged_profit_usd": 3215.0}, {"ticket": 120535267, "open_time_utc": "2026-06-03 03:51:00", "close_time_utc": "2026-06-03 04:40:00", "direction": "short", "open_price": 4483.74, "close_price": 4472.62, "volume_lots": 5.0, "logged_profit_usd": 5560.0}, {"ticket": 120553961, "open_time_utc": "2026-06-04 01:57:00", "close_time_utc": "2026-06-04 02:09:00", "direction": "short", "open_price": 4466.08, "close_price": 4459.66, "volume_lots": 5.0, "logged_profit_usd": 3210.0}, {"ticket": 120556794, "open_time_utc": "2026-06-04 07:22:00", "close_time_utc": "2026-06-04 23:43:00", "direction": "short", "open_price": 4466.26, "close_price": 4464.15, "volume_lots": 5.0, "logged_profit_usd": 1055.0}, {"ticket": 120628852, "open_time_utc": "2026-06-09 09:31:00", "close_time_utc": "2026-06-09 14:18:00", "direction": "short", "open_price": 4328.04, "close_price": 4307.89, "volume_lots": 5.0, "logged_profit_usd": 10075.0}, {"ticket": 120641935, "open_time_utc": "2026-06-09 17:27:00", "close_time_utc": "2026-06-09 17:47:00", "direction": "short", "open_price": 4265.11, "close_price": 4259.39, "volume_lots": 5.0, "logged_profit_usd": 2860.0}, {"ticket": 120650370, "open_time_utc": "2026-06-10 07:22:00", "close_time_utc": "2026-06-10 07:43:00", "direction": "short", "open_price": 4200.06, "close_price": 4189.86, "volume_lots": 5.0, "logged_profit_usd": 5100.0}, {"ticket": 120666480, "open_time_utc": "2026-06-10 15:53:00", "close_time_utc": "2026-06-10 17:43:00", "direction": "short", "open_price": 4111.65, "close_price": 4105.58, "volume_lots": 5.0, "logged_profit_usd": 3035.0}, {"ticket": 120673288, "open_time_utc": "2026-06-10 22:05:00", "close_time_utc": "2026-06-10 22:12:00", "direction": "short", "open_price": 4062.31, "close_price": 4051.32, "volume_lots": 5.0, "logged_profit_usd": 5495.0}, {"ticket": 120673916, "open_time_utc": "2026-06-10 22:48:00", "close_time_utc": "2026-06-10 22:54:00", "direction": "short", "open_price": 4064.54, "close_price": 4054.54, "volume_lots": 5.0, "logged_profit_usd": 5000.0}, {"ticket": 120682863, "open_time_utc": "2026-06-11 10:05:00", "close_time_utc": "2026-06-11 11:21:00", "direction": "short", "open_price": 4092.01, "close_price": 4085.31, "volume_lots": 6.0, "logged_profit_usd": 4020.0}, {"ticket": 120732735, "open_time_utc": "2026-06-15 12:29:00", "close_time_utc": "2026-06-15 17:57:00", "direction": "short", "open_price": 4334.56, "close_price": 4322.84, "volume_lots": 6.0, "logged_profit_usd": 7032.0}, {"ticket": 120748284, "open_time_utc": "2026-06-16 10:58:00", "close_time_utc": "2026-06-16 14:19:00", "direction": "short", "open_price": 4347.28, "close_price": 4323.01, "volume_lots": 6.0, "logged_profit_usd": 14562.0}, {"ticket": 120777829, "open_time_utc": "2026-06-17 22:06:00", "close_time_utc": "2026-06-18 08:47:00", "direction": "short", "open_price": 4259.22, "close_price": 4280.75, "volume_lots": 6.0, "logged_profit_usd": -12918.0}, {"ticket": 120778997, "open_time_utc": "2026-06-18 01:03:00", "close_time_utc": "2026-06-18 02:12:00", "direction": "long", "open_price": 4326.75, "close_price": 4327.12, "volume_lots": 6.0, "logged_profit_usd": 222.0}, {"ticket": 120779576, "open_time_utc": "2026-06-18 02:21:00", "close_time_utc": "2026-06-18 08:47:00", "direction": "short", "open_price": 4327.13, "close_price": 4281.06, "volume_lots": 4.0, "logged_profit_usd": 18428.0}, {"ticket": 120809619, "open_time_utc": "2026-06-19 12:09:00", "close_time_utc": "2026-06-19 12:37:00", "direction": "short", "open_price": 4157.01, "close_price": 4152.65, "volume_lots": 6.0, "logged_profit_usd": 2616.0}, {"ticket": 120818575, "open_time_utc": "2026-06-22 02:52:00", "close_time_utc": "2026-06-22 03:42:00", "direction": "short", "open_price": 4191.19, "close_price": 4176.53, "volume_lots": 6.0, "logged_profit_usd": 8796.0}, {"ticket": 120820444, "open_time_utc": "2026-06-22 06:15:00", "close_time_utc": "2026-06-22 15:49:00", "direction": "short", "open_price": 4195.01, "close_price": 4174.97, "volume_lots": 6.0, "logged_profit_usd": 12024.0}, {"ticket": 120851752, "open_time_utc": "2026-06-23 14:09:00", "close_time_utc": "2026-06-23 14:38:00", "direction": "short", "open_price": 4140.36, "close_price": 4124.12, "volume_lots": 6.0, "logged_profit_usd": 9744.0}, {"ticket": 120854247, "open_time_utc": "2026-06-23 16:34:00", "close_time_utc": "2026-06-23 17:34:00", "direction": "short", "open_price": 4141.85, "close_price": 4129.18, "volume_lots": 7.0, "logged_profit_usd": 8869.0}, {"ticket": 120862839, "open_time_utc": "2026-06-24 07:43:00", "close_time_utc": "2026-06-24 07:59:00", "direction": "short", "open_price": 4081.05, "close_price": 4075.0, "volume_lots": 7.0, "logged_profit_usd": 4235.0}, {"ticket": 120871478, "open_time_utc": "2026-06-24 13:59:00", "close_time_utc": "2026-06-24 14:01:00", "direction": "short", "open_price": 4038.06, "close_price": 4032.92, "volume_lots": 7.0, "logged_profit_usd": 3598.0}, {"ticket": 120884716, "open_time_utc": "2026-06-25 08:42:00", "close_time_utc": "2026-06-25 11:00:00", "direction": "short", "open_price": 4000.85, "close_price": 3984.46, "volume_lots": 4.0, "logged_profit_usd": 6556.0}, {"ticket": 120888682, "open_time_utc": "2026-06-25 12:55:00", "close_time_utc": "2026-06-25 13:59:00", "direction": "short", "open_price": 4016.01, "close_price": 4002.92, "volume_lots": 4.0, "logged_profit_usd": 5236.0}, {"ticket": 120889700, "open_time_utc": "2026-06-25 13:30:00", "close_time_utc": "2026-06-25 13:59:00", "direction": "short", "open_price": 4023.19, "close_price": 4002.11, "volume_lots": 4.0, "logged_profit_usd": 8432.0}, {"ticket": 120894147, "open_time_utc": "2026-06-25 16:15:00", "close_time_utc": "2026-06-25 20:30:00", "direction": "short", "open_price": 4037.83, "close_price": 4029.87, "volume_lots": 7.0, "logged_profit_usd": 5572.0}];
+
+const MAE_LOOKUP = {"118360666": 1303.12, "118382072": 687.6, "118424462": 2279.75, "118450131": 0.0, "118463820": 2664.68, "118514451": 837.42, "118536224": 1372.15, "118595206": 0.0, "118637360": 14761.5, "118912559": 2222.5, "118943975": 1416.35, "118982368": 4956.25, "118993557": 0.0, "119048759": 4854.5, "119055262": 1130.35, "119057282": 1116.05, "119059372": 0.0, "119069886": 2131.35, "119140921": 0.0, "119141324": 0.0, "119145730": 863.5, "119152382": 4982.5, "119187058": 0.0, "119188683": 975.5, "119191951": 0.0, "119194012": 154.5, "119225718": 586.5, "119230610": 2030.5, "119271919": 675.5, "119279151": 0.0, "119282079": 2191.5, "119300510": 705.5, "119333650": 0.0, "119342005": 0.0, "119343603": 4879.5, "119354906": 1955.5, "119374027": 1954.12, "119389994": 26721.1, "119431894": 6175.5, "119504701": 3534.75, "119537620": 0.0, "119544991": 2243.25, "119576016": 0.0, "119578476": 618.75, "119586285": 1503.75, "119589413": 2059.6, "119591591": 1563.0, "119593689": 469.0, "119608748": 14437.0, "119624796": 0.0, "119641337": 3768.5, "119655394": 1127.0, "119660756": 3911.0, "119671890": 5015.0, "119680040": 31813.0, "119700501": 10581.5, "119770198": 1454.5, "119839707": 2247.0, "119850434": 1451.0, "119854447": 868.75, "119863979": 3138.75, "119878348": 560.3, "119878876": 354.9, "119880632": 10931.7, "119906491": 13019.5, "119916088": 109.9, "119931782": 1228.5, "119945020": 619.5, "119954583": 1960.5, "119972796": 3298.5, "119990330": 1627.5, "119991105": 3188.4, "120004085": 24631.5, "120008047": 3467.25, "120091375": 157.5, "120098401": 3127.5, "120099723": 463.5, "120117934": 9280.5, "120126045": 1792.5, "120138779": 8548.5, "120175835": 6856.2, "120186984": 36199.8, "120188896": 7842.1, "120223356": 1566.0, "120232317": 5210.0, "120238043": 2242.0, "120252285": 494.0, "120253942": 475.2, "120280825": 4478.0, "120286400": 0.0, "120301829": 15998.0, "120306624": 2769.0, "120313080": 5402.0, "120328974": 4838.0, "120335442": 2994.0, "120349845": 3338.0, "120357426": 17702.0, "120369450": 82.0, "120418463": 5086.0, "120425216": 2886.0, "120428891": 1146.0, "120440874": 462.0, "120450351": 6194.0, "120470278": 3459.2, "120497523": 0.0, "120500745": 5492.5, "120524250": 0.0, "120528406": 0.0, "120535267": 2147.5, "120553961": 422.5, "120556794": 24457.5, "120628852": 17582.5, "120641935": 1344.0, "120650370": 0.0, "120666480": 11732.5, "120673288": 5097.5, "120673916": 992.5, "120682863": 1491.0, "120732735": 20955.0, "120748284": 4575.0, "120777829": 42387.0, "120778997": 7083.0, "120779576": 0.0, "120809619": 0.0, "120818575": 0.0, "120820444": 11997.0, "120851752": 1371.0, "120854247": 1200.5, "120862839": 3468.5, "120871478": 1888.6, "120884716": 0.0, "120888682": 7150.0, "120889700": 2114.0, "120894147": 4261.6};
+
+const CONTRACT_SIZE = 100;
+const TABLE_NAME = 'new_trades';
+
+function fmtUsd(n) {
+  if (n === null || n === undefined || isNaN(n)) return '-';
+  const sign = n < 0 ? '-' : '';
+  return sign + '$' + Math.abs(Math.round(n * 100) / 100).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+function fmtPrice(n) {
+  if (n === null || n === undefined || isNaN(n)) return '-';
+  return Math.round(n * 100) / 100;
+}
+function fmtPoints(n) {
+  if (n === null || n === undefined || isNaN(n)) return '-';
+  return (Math.round(n * 100) / 100).toFixed(2);
+}
+
+// ---- Persistence layer ----
+// Tries Supabase first (cross-device sync). Falls back to localStorage
+// (this device/browser only) if Supabase isn't configured or fails.
+const LOCAL_KEY = 'copy_trade_agent_new_trades';
+
+async function loadStored() {
+  if (supabaseReady) {
+    try {
+      const { data, error } = await supabaseClient.from(TABLE_NAME).select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      setSyncStatus('ok');
+      return data.map(d => ({
+        direction: d.direction, entry: d.entry, close: d.close, worst: d.worst,
+        lots: d.lots, opentime: d.opentime, closetime: d.closetime, pl: d.pl, id: d.id,
+      }));
+    } catch (e) {
+      console.error('Supabase load failed', e);
+      setSyncStatus('error');
+    }
+  } else {
+    setSyncStatus('local');
+  }
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+async function saveTrade(trade) {
+  if (supabaseReady) {
+    try {
+      const { error } = await supabaseClient.from(TABLE_NAME).insert([trade]);
+      if (error) throw error;
+      setSyncStatus('ok');
+      return;
+    } catch (e) {
+      console.error('Supabase save failed', e);
+      setSyncStatus('error');
+    }
+  }
+  const existing = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
+  existing.push(trade);
+  localStorage.setItem(LOCAL_KEY, JSON.stringify(existing));
+}
+
+function renderLog() {
+  const tbody = document.getElementById('log-tbody');
+  const sorted = [...SARUJA_TRADES].sort((a,b) => new Date(b.open_time_utc) - new Date(a.open_time_utc));
+  let wins = 0, total = 0, maxPoints = 0;
+  tbody.innerHTML = sorted.map(t => {
+    const win = t.logged_profit_usd > 0;
+    if (win) wins++;
+    total += t.logged_profit_usd;
+
+    const maeUsd = MAE_LOOKUP[String(t.ticket)];
+    let pointsCell = '<span class="muted">n/a</span>';
+    let usdCell = '<span class="muted">n/a</span>';
+    if (maeUsd !== undefined && t.volume_lots) {
+      const points = maeUsd / (t.volume_lots * CONTRACT_SIZE);
+      if (points > maxPoints) maxPoints = points;
+      const worstPrice = t.direction === 'short' ? (t.open_price + points) : (t.open_price - points);
+      pointsCell = '<span class="points-tag" title="Worst price reached: ' + fmtPrice(worstPrice) + '">' + fmtPoints(points) + ' pts</span>';
+      usdCell = '<span class="loss">' + fmtUsd(points) + '</span>';
+    }
+
+    return '<tr>' +
+      '<td>' + t.open_time_utc.slice(0,16) + '</td>' +
+      '<td>' + t.close_time_utc.slice(0,16) + '</td>' +
+      '<td style="text-transform:capitalize">' + t.direction + '</td>' +
+      '<td class="r num">' + fmtPrice(t.open_price) + '</td>' +
+      '<td class="r num">' + fmtPrice(t.close_price) + '</td>' +
+      '<td class="r num ' + (win ? 'win' : 'loss') + '">' + fmtUsd(t.logged_profit_usd) + '</td>' +
+      '<td class="r num">' + pointsCell + '</td>' +
+      '<td class="r num">' + usdCell + '</td>' +
+    '</tr>';
+      }).join('');
+  document.getElementById('stat-count').textContent = sorted.length;
+  document.getElementById('stat-winrate').textContent = Math.round((wins/sorted.length)*100) + '%';
+  document.getElementById('stat-total').textContent = fmtUsd(total);
+  document.getElementById('stat-maxmae').textContent = fmtPoints(maxPoints) + ' pts';
+}
+
+function computeAgainstPoints(direction, entry, worst) {
+  if (!entry || !worst) return null;
+  const points = direction === 'long' ? (entry - worst) : (worst - entry);
+  return Math.max(points, 0);
+}
+
+function updateNewTradePreview() {
+  const dir = document.getElementById('nt-direction').value;
+  const entry = parseFloat(document.getElementById('nt-entry').value);
+  const worst = parseFloat(document.getElementById('nt-worstprice').value);
+  const lots = parseFloat(document.getElementById('nt-lots').value);
+  const close = parseFloat(document.getElementById('nt-close').value);
+  const preview = document.getElementById('nt-preview');
+  const points = computeAgainstPoints(dir, entry, worst);
+  let html = '';
+  if (points !== null) {
+    const usd = lots ? points * lots * CONTRACT_SIZE : null;
+    html += '<div>Market moved against you by <strong>' + fmtPoints(points) + ' points</strong>' + (usd !== null ? ' (' + fmtUsd(usd) + ')' : '') + ' at worst</div>';
+  }
+  if (!isNaN(close) && !isNaN(entry) && !isNaN(lots)) {
+    const sign = dir === 'long' ? 1 : -1;
+    const pl = (close - entry) * sign * lots * CONTRACT_SIZE;
+    html += '<div style="margin-top:6px">Resulting p/l: <strong class="' + (pl>=0?'win':'loss') + '">' + fmtUsd(pl) + '</strong></div>';
+  }
+  if (html) {
+    preview.innerHTML = html;
+    preview.style.display = 'block';
+  } else {
+    preview.style.display = 'none';
+  }
+}
+
+async function renderNewTradesIntoLog() {
+  const stored = await loadStored();
+  if (stored.length === 0) return;
+  const tbody = document.getElementById('log-tbody');
+  const rows = stored.map(t => {
+    const points = (t.worst !== null && t.worst !== undefined) ? computeAgainstPoints(t.direction, t.entry, t.worst) : null;
+    const usd = points;
+    return '<tr class="mine">' +
+      '<td>' + (t.opentime||'').slice(0,16) + '</td>' +
+      '<td>' + ((t.closetime||'').slice(0,16) || 'open') + '</td>' +
+      '<td style="text-transform:capitalize">' + t.direction + '</td>' +
+      '<td class="r num">' + fmtPrice(t.entry) + '</td>' +
+      '<td class="r num">' + (t.close ? fmtPrice(t.close) : '-') + '</td>' +
+      '<td class="r num ' + (t.pl===null?'muted':(t.pl>=0?'win':'loss')) + '">' + (t.pl===null?'open':fmtUsd(t.pl)) + '</td>' +
+      '<td class="r num loss">' + (points===null?'-':fmtPoints(points) + ' pts') + '</td>' +
+      '<td class="r num loss">' + (usd===null?'-':fmtUsd(usd)) + '</td>' +
+    '</tr>';
+  }).join('');
+  tbody.insertAdjacentHTML('afterbegin', rows);
+}
+
+// ---- Navigation ----
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    ['log','new','size'].forEach(p => {
+      document.getElementById('page-' + p).style.display = (p === item.dataset.page) ? 'block' : 'none';
+    });
+  });
+});
+
+// ---- New trade form ----
+['nt-direction','nt-entry','nt-worstprice','nt-lots','nt-close'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateNewTradePreview);
+});
+document.getElementById('nt-direction').addEventListener('change', updateNewTradePreview);
+
+document.getElementById('nt-save').addEventListener('click', async () => {
+  const direction = document.getElementById('nt-direction').value;
+  const entry = parseFloat(document.getElementById('nt-entry').value);
+  const closeVal = parseFloat(document.getElementById('nt-close').value);
+  const close = isNaN(closeVal) ? null : closeVal;
+  const worstVal = parseFloat(document.getElementById('nt-worstprice').value);
+  const worst = isNaN(worstVal) ? null : worstVal;
+  const lots = parseFloat(document.getElementById('nt-lots').value);
+  const opentime = document.getElementById('nt-opentime').value;
+  const closetime = document.getElementById('nt-closetime').value;
+
+  if (!entry || !lots || !opentime) {
+    alert('Entry price, lot size, and open time are required.');
+    return;
+  }
+
+  const sign = direction === 'long' ? 1 : -1;
+  const pl = close !== null ? (close - entry) * sign * lots * CONTRACT_SIZE : null;
+
+  const trade = { direction, entry, close, worst, lots, opentime, closetime, pl };
+  await saveTrade(trade);
+
+  document.getElementById('nt-saved-msg').style.display = 'inline';
+  setTimeout(() => { document.getElementById('nt-saved-msg').style.display = 'none'; }, 2000);
+
+  renderLog();
+  await renderNewTradesIntoLog();
+
+  ['nt-entry','nt-close','nt-worstprice','nt-lots','nt-opentime','nt-closetime'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('nt-preview').style.display = 'none';
+});
+
+// ---- Lot size calculator ----
+function updateLotSize() {
+  const capital = parseFloat(document.getElementById('ls-capital').value);
+  const riskPct = parseFloat(document.getElementById('ls-riskpct').value);
+  const entry = parseFloat(document.getElementById('ls-entry').value);
+  const stop = parseFloat(document.getElementById('ls-stop').value);
+
+  if (!capital || !riskPct || !entry || !stop) {
+    document.getElementById('ls-out-risk').textContent = '-';
+    document.getElementById('ls-out-lots').textContent = '-';
+    return;
+  }
+
+  const riskUsd = capital * (riskPct / 100);
+  const stopDistance = Math.abs(entry - stop);
+  const lots = stopDistance > 0 ? riskUsd / (stopDistance * CONTRACT_SIZE) : 0;
+
+  document.getElementById('ls-out-risk').textContent = fmtUsd(riskUsd);
+  document.getElementById('ls-out-lots').textContent = (Math.round(lots * 100) / 100) + ' lots';
+}
+
+['ls-capital','ls-riskpct','ls-entry','ls-stop'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateLotSize);
+});
+
+document.getElementById('ls-agree-yes').addEventListener('click', () => {
+  const r = document.getElementById('ls-agree-result');
+  r.style.display = 'block';
+  r.style.background = '#EAF2EC';
+  r.style.color = '#2E6B4F';
+  r.textContent = 'Trend agrees. This matches the setup the validated backtest was built on. Still use the stop-loss above, every time.';
+});
+document.getElementById('ls-agree-no').addEventListener('click', () => {
+  const r = document.getElementById('ls-agree-result');
+  r.style.display = 'block';
+  r.style.background = '#F6EAE8';
+  r.style.color = '#A13D32';
+  r.textContent = 'Trend does not agree, or you are not sure. The backtest only validated entries with trend agreement. Consider skipping this one or sizing down further.';
+});
+
+renderLog();
+renderNewTradesIntoLog();
+</script>
+</body>
+</html>
